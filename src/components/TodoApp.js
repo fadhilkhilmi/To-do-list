@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import TaskModal from "@/components/TaskModal";
 
+// Data awal contoh agar web tidak langsung kosong melompong saat dibuka pertama kali
 const INITIAL_TASKS = [
   {
     id: "task-1",
-    text: "Memahami struktur folder Next.js",
+    text: "Memahami struktur folder App Router di Next.js",
     description:
       "Pelajari hubungan antara layout.js, page.js, dan folder dinamis.",
     completed: true,
@@ -15,9 +16,18 @@ const INITIAL_TASKS = [
   },
   {
     id: "task-2",
-    text: "Membuat aplikasi CRUD To-Do List",
+    text: "Memisahkan logika Server Component dan Client Component",
     description:
-      "Implementasikan Create, Read, Update, dan Delete menggunakan modal.",
+      "Ketahui kapan harus menggunakan directive 'use client' dan kapan cukup di server.",
+    completed: true,
+    priority: "biasa",
+    createdAt: "2026-10-12",
+  },
+  {
+    id: "task-3",
+    text: "Menerapkan fitur CRUD lengkap dan popup modal seragam",
+    description:
+      "Gunakan form yang sama untuk Create, Edit, dan melihat Detail tugas.",
     completed: false,
     priority: "penting",
     createdAt: "2026-10-12",
@@ -26,76 +36,86 @@ const INITIAL_TASKS = [
 
 export default function TodoApp() {
   const [tasks, setTasks] = useState(INITIAL_TASKS);
-
   const [filter, setFilter] = useState("semua");
-
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // State untuk mengontrol jendela modal popup (Create, Edit, Detail)
   const [modalState, setModalState] = useState({
     isOpen: false,
-    mode: "create",
+    mode: "create", // "create" | "edit" | "detail"
     task: null,
   });
 
-  // Membaca data LocalStorage saat halaman dibuka
+  // 1. Membaca Celengan LocalStorage saat browser pertama kali dibuka
   useEffect(() => {
-    const saved = localStorage.getItem("to-do-next-tasks");
-
-    if (saved) {
-      setTasks(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem("to-do-next-tasks");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTasks(parsed);
+        }
+      }
+    } catch {
+      // Jika terjadi kesalahan membaca, gunakan data contoh bawaan
     }
-
     setIsLoaded(true);
   }, []);
 
-  // Menyimpan data ke LocalStorage
+  // 2. Menyimpan ke Celengan LocalStorage setiap kali ada perubahan tugas
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem("to-do-next-tasks", JSON.stringify(tasks));
+      try {
+        localStorage.setItem("to-do-next-tasks", JSON.stringify(tasks));
+      } catch {
+        // Abaikan jika memori browser penuh
+      }
     }
   }, [tasks, isLoaded]);
 
-  // CREATE
+  // JURUS C (CREATE): Menambahkan tugas baru dari modal ke dalam daftar
   const handleCreateTask = (newTask) => {
     setTasks((prev) => [newTask, ...prev]);
   };
 
-  // UPDATE
+  // JURUS U (UPDATE): Menyimpan perubahan dari modal edit ke dalam daftar
   const handleUpdateTask = (updatedTask) => {
     setTasks((prev) =>
       prev.map((task) => (task.id === updatedTask.id ? updatedTask : task)),
     );
   };
 
-  // DELETE
-  const deleteTask = (id) => {
-    setTasks((prev) => prev.filter((task) => task.id !== id));
-  };
-
-  // CHECKLIST SELESAI
+  // JURUS U (UPDATE CEPAT): Mencentang selesai dari kotak centang di kartu tugas
   const toggleTask = (id) => {
     setTasks((prev) =>
       prev.map((task) =>
-        task.id === id
-          ? {
-              ...task,
-              completed: !task.completed,
-            }
-          : task,
+        task.id === id ? { ...task, completed: !task.completed } : task,
       ),
     );
   };
 
-  // FILTER
+  // JURUS D (DELETE): Menghapus satu tugas berdasarkan ID-nya
+  const deleteTask = (id) => {
+    setTasks((prev) => prev.filter((task) => task.id !== id));
+  };
+
+  // JURUS D (DELETE MASSAL): Menghapus seluruh tugas yang sudah bertanda selesai
+  const clearCompleted = () => {
+    setTasks((prev) => prev.filter((task) => !task.completed));
+  };
+
+  // Hitung jumlah tugas aktif dan tugas selesai untuk angka status
+  const activeCount = tasks.filter((t) => !t.completed).length;
+  const completedCount = tasks.filter((t) => t.completed).length;
+
+  // JURUS R (READ & FILTER): Menyaring tugas sesuai tab yang dipilih
   const filteredTasks = tasks.filter((task) => {
     if (filter === "aktif") return !task.completed;
-
     if (filter === "selesai") return task.completed;
-
     return true;
   });
 
-  // BUKA MODAL CREATE
+  // Fungsi-fungsi pembuka modal dengan kostum yang tepat
   const openCreateModal = () => {
     setModalState({
       isOpen: true,
@@ -104,7 +124,6 @@ export default function TodoApp() {
     });
   };
 
-  // BUKA DETAIL
   const openDetailModal = (task) => {
     setModalState({
       isOpen: true,
@@ -113,7 +132,6 @@ export default function TodoApp() {
     });
   };
 
-  // BUKA EDIT
   const openEditModal = (task) => {
     setModalState({
       isOpen: true,
@@ -123,69 +141,220 @@ export default function TodoApp() {
   };
 
   const closeModal = () => {
-    setModalState({
-      isOpen: false,
-      mode: "create",
-      task: null,
-    });
+    setModalState((prev) => ({ ...prev, isOpen: false }));
   };
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={openCreateModal}
-        className="rounded-lg bg-blue-600 px-4 py-2 text-white"
-      >
-        + Tambah Tugas Baru
-      </button>
+      {/* KARTU ATAS: Tombol Utama Buat Tugas Baru */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+            Daftar Aktivitas
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {activeCount === 0 && tasks.length > 0
+              ? "Semua aktivitas beres! Tekan tombol untuk menambah lagi."
+              : `Ada ${activeCount} aktivitas yang menunggu diselesaikan.`}
+          </p>
+        </div>
 
-      <div className="space-x-2">
-        <button onClick={() => setFilter("semua")}>Semua</button>
-
-        <button onClick={() => setFilter("aktif")}>Aktif</button>
-
-        <button onClick={() => setFilter("selesai")}>Selesai</button>
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white shadow-xs transition hover:bg-slate-800 active:scale-98 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+        >
+          <span className="text-base leading-none">+</span> Tambah Tugas Baru
+        </button>
       </div>
 
-      {filteredTasks.map((task) => (
-        <div key={task.id} className="rounded-lg border p-4">
-          <input
-            type="checkbox"
-            checked={task.completed}
-            onChange={() => toggleTask(task.id)}
-          />
-
-          <span
-            onClick={() => openDetailModal(task)}
-            className="ml-3 cursor-pointer"
-          >
-            {task.text}
-          </span>
-
-          <button onClick={() => openEditModal(task)} className="ml-4">
-            Edit
-          </button>
-
+      {/* BILAH FILTER & TOMBOL PEMBERSIH */}
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+        {/* Tab Filter: Semua, Aktif, Selesai */}
+        <div className="flex items-center gap-1">
           <button
-            onClick={() => deleteTask(task.id)}
-            className="ml-2 text-red-500"
+            type="button"
+            onClick={() => setFilter("semua")}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 dark:focus-visible:ring-slate-100 ${
+              filter === "semua"
+                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            }`}
           >
-            Hapus
+            Semua ({tasks.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter("aktif")}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 dark:focus-visible:ring-slate-100 ${
+              filter === "aktif"
+                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            }`}
+          >
+            Aktif ({activeCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter("selesai")}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 dark:focus-visible:ring-slate-100 ${
+              filter === "selesai"
+                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            }`}
+          >
+            Selesai ({completedCount})
           </button>
         </div>
-      ))}
 
+        {/* Tombol Hapus Yang Sudah Selesai */}
+        {completedCount > 0 && (
+          <button
+            type="button"
+            onClick={clearCompleted}
+            className="text-left text-xs font-medium text-rose-600 transition hover:text-rose-700 hover:underline sm:text-right dark:text-rose-400"
+          >
+            Hapus yang selesai ({completedCount})
+          </button>
+        )}
+      </div>
+
+      {/* DAFTAR TUGAS DI LAYAR */}
+      <div className="space-y-2.5">
+        {filteredTasks.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center dark:border-slate-800 dark:bg-slate-900/40">
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+              {filter === "aktif"
+                ? "Tidak ada tugas yang tertunda."
+                : filter === "selesai"
+                  ? "Belum ada tugas yang selesai."
+                  : "Belum ada tugas. Tekan tombol '+ Tambah Tugas Baru' di atas."}
+            </p>
+          </div>
+        ) : (
+          filteredTasks.map((task) => (
+            <div
+              key={task.id}
+              className={`group flex items-start justify-between gap-3 rounded-xl border p-4 transition dark:bg-slate-900 ${
+                task.completed
+                  ? "border-slate-200/60 bg-slate-50/70 text-slate-400 dark:border-slate-800/60 dark:bg-slate-900/40"
+                  : "border-slate-200 bg-white text-slate-800 shadow-xs hover:border-slate-300 dark:border-slate-800 dark:text-slate-100"
+              }`}
+            >
+              {/* Kotak Centang Selesai */}
+              <input
+                type="checkbox"
+                id={task.id}
+                checked={task.completed}
+                onChange={() => toggleTask(task.id)}
+                className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-2 focus:ring-slate-900/20 dark:border-slate-700 dark:text-slate-100"
+              />
+
+              {/* Teks Tugas (Bisa Diklik untuk Membuka Mode Detail) */}
+              <div
+                onClick={() => openDetailModal(task)}
+                className="min-w-0 flex-1 cursor-pointer space-y-1"
+                title="Klik untuk melihat detail tugas"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`text-sm select-none ${
+                      task.completed
+                        ? "line-through text-slate-400 dark:text-slate-500"
+                        : "font-semibold text-slate-900 group-hover:text-blue-600 dark:text-slate-100 dark:group-hover:text-blue-400"
+                    }`}
+                  >
+                    {task.text}
+                  </span>
+
+                  {task.priority === "penting" && (
+                    <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300">
+                      Penting
+                    </span>
+                  )}
+                </div>
+
+                {/* Potongan Deskripsi Singkat */}
+                {task.description && (
+                  <p
+                    className={`line-clamp-2 text-xs leading-relaxed ${
+                      task.completed
+                        ? "line-through text-slate-400 dark:text-slate-600"
+                        : "text-slate-600 dark:text-slate-400"
+                    }`}
+                  >
+                    {task.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Tombol Aksi Samping (Detail, Edit, Hapus) */}
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => openDetailModal(task)}
+                  aria-label={`Lihat detail tugas: ${task.text}`}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                >
+                  Detail
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openEditModal(task)}
+                  aria-label={`Edit tugas: ${task.text}`}
+                  className="rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                >
+                  Edit
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => deleteTask(task.id)}
+                  aria-label={`Hapus tugas: ${task.text}`}
+                  className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:hover:bg-slate-800 dark:hover:text-rose-400"
+                >
+                  <span className="text-xs font-semibold px-1">✕</span>
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* FOOTER RINGKASAN BAWAH */}
+      <footer className="flex items-center justify-between border-t border-slate-200/80 pt-4 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        <span>
+          {activeCount === 0 && tasks.length > 0
+            ? "Semua tugas selesai, kerja bagus!"
+            : `${activeCount} dari ${tasks.length} tugas aktif`}
+        </span>
+        <span className="font-mono text-[11px] text-slate-400 dark:text-slate-600">
+          Data tersimpan di browser
+        </span>
+      </footer>
+
+      {/* MEMASANG JENDELA MODAL TERPADU KE LAYAR */}
       <TaskModal
         isOpen={modalState.isOpen}
         mode={modalState.mode}
         task={modalState.task}
         onClose={closeModal}
         onSave={(data) => {
-          if (modalState.mode === "create") handleCreateTask(data);
-          else handleUpdateTask(data);
+          if (modalState.mode === "create") {
+            handleCreateTask(data);
+          } else {
+            handleUpdateTask(data);
+          }
         }}
         onDelete={deleteTask}
-        onSwitchToEdit={(task) => openEditModal(task)}
+        onSwitchToEdit={(task) => {
+          setModalState({
+            isOpen: true,
+            mode: "edit",
+            task,
+          });
+        }}
       />
     </div>
   );
